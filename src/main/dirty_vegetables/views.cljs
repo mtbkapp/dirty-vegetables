@@ -5,23 +5,25 @@
 
 (defn home
   [[params query]]
-  [:div "home"]
-  )
+  [:div "home"])
+
 
 (defn ingredient-list
   [[params query]]
-  [:div "ingredient list"]
-  )
+  [:div "ingredient list"])
+
 
 (defn ingredient-detail
   [[params query]]
-  [:div (str "ingredient-detail" params)]
-  )
+  [:div (str "ingredient-detail" params)])
+
 
 (defn recipe-list
   [[params query]]
   [:div "recipe-list"])
 
+
 (defn recipe-detail
   [[params query]]
   [:div (str "recipe-detail" params)])
+

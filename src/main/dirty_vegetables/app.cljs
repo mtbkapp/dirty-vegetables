@@ -1,6 +1,7 @@
 (ns dirty-vegetables.app
   (:require [bide.core :as route]
             [dirty-vegetables.views :as views]
+            [dirty-vegetables.identity :as id]
             [reagent.core :as r]
             [reagent.dom :as rd]))
 
@@ -34,12 +35,14 @@
 (defn scaffold
   []
   (let [[route & args] @router-state]
-    ;TODO put auth here
-    [(get views route) args]))
+    (if (id/ready? @id/state)
+      [(get views route) args]
+      [:div "Please Login"])))
 
 
 (defn init
   []
+  (id/start!)
   (route/start! router {:default :app/home 
                         :on-navigate on-navigate})
   (rd/render [scaffold] (js/document.getElementById "app")))
