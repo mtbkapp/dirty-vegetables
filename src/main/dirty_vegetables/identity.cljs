@@ -16,7 +16,10 @@
                  (-> (.json resp)
                      (.then (fn [body]
                               (js/console.log "fk" body)
-                              (swap! state assoc :ready? true :fauna-key (.-faunaKey body))))))
+                              (swap! state 
+                                     assoc
+                                     :ready? true
+                                     :fauna-key (.-faunaKey ^object body))))))
                (do
                  (js/console.error "non 200 trying to get fauna key")
                  (swap! state assoc :error true))))))
