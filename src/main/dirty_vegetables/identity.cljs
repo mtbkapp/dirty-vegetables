@@ -1,5 +1,6 @@
 (ns dirty-vegetables.identity
-  (:require [reagent.core :as r]))
+  (:require [reagent.core :as r]
+            [dirty-vegetables.fauna :as fauna]))
 
 
 (def state (r/atom {:ready? false}))
@@ -15,14 +16,12 @@
                (if (.-ok resp)
                  (-> (.json resp)
                      (.then (fn [body]
-                              (js/console.log "fk" body)
+                              (js/console.log "got fuana key")
                               (swap! state 
                                      assoc
                                      :ready? true
-                                     :fauna-key (.-faunaKey ^object body))))))
-               (do
-                 (js/console.error "non 200 trying to get fauna key")
-                 (swap! state assoc :error true))))))
+                                     :fauna-key (.-faunaKey ^object body)))))
+                 (js/console.error "non 200 trying to get fauna key"))))))
 
 
 (defn fetch-fauna-key
@@ -65,4 +64,40 @@
 (defn ready?
   [{:keys [ready?]}]
   ready?)
+
+
+(def manual-fauna-key-key "manualFaunaKey")
+
+
+(def manual-fauna-key-state
+  (r/atom {:key (str (js/localStorage.getItem manual-fauna-key-key))
+           :error nil}))
+
+
+(defn on-manual-fauna-key-click
+  [{fk :key}]
+  (js/localStorage.setItem manual-fauna-key-key fk)
+  (-> (fauna/test-key fk)
+      (.then (fn []
+               (swap! state assoc :ready? true :fauna-key fk)))
+      (.catch (fn []
+                (swap! manual-fauna-key-state assoc :error "Invalid fauna key")))))
+
+
+(defn manual-fauna-key
+  []
+  (let [{fk :key error :error} @manual-fauna-key-state]
+    [:div {:id "manual-fauna-key"}
+     [:label {:for "manual-fauna-key"} "Manual fauna key:"]
+     [:input {:type "text"
+              :id "manual-fauna-key"
+              :value fk 
+              :on-change #(swap! manual-fauna-key-state
+                                 assoc
+                                 :key
+                                 (.-value (.-target %)))}]
+     [:button {:type "button"
+               :on-click #(on-manual-fauna-key-click @manual-fauna-key-state)}
+      "Ok"]
+     [:span {:class "error"} error]]))
 

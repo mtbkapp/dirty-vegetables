@@ -29,3 +29,7 @@ header ul {
 .sub-header .auth {
 
 }
+
+#manual-fauna-key .error {
+  color: red;
+}

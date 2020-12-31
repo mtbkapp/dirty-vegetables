@@ -37,7 +37,7 @@
   (let [[route & args] @router-state]
     (if (id/ready? @id/state)
       [(get views route) args]
-      [:div "Please Login"])))
+      [:div "Please login or enter db key" [id/manual-fauna-key]])))
 
 
 (defn init
