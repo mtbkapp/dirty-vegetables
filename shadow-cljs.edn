@@ -1,0 +1,18 @@
+;; shadow-cljs configuration
+{:source-paths
+ ["src/dev"
+  "src/main"
+  "src/test"]
+
+ :dev-http {9090 "public"}
+
+ :dependencies
+ [; react wrapper
+  [reagent "1.0.0"]
+  ; routing
+  [funcool/bide "1.6.0"]]
+
+ :builds
+ {:frontend
+  {:target :browser
+   :modules {:main {:init-fn dirty-vegetables.app/init}}}}}

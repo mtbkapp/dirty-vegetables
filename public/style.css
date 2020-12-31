@@ -1,0 +1,31 @@
+body {
+  font-family: monospace;
+}
+
+header li {
+  display: inline;
+}
+
+header ul {
+  padding: 0;
+  margin: 0;
+}
+
+.netlify-identity-signup {
+  display: none;
+}
+
+.sub-header {
+  display: flex;
+  flex-direction: row;
+  font-size: 12pt;
+  margin-bottom: 30px; 
+}
+
+.sub-header .nav {
+  flex-grow: 1;
+}
+
+.sub-header .auth {
+
+}
