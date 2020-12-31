@@ -4,15 +4,22 @@
 
 (def state (r/atom {:ready? false}))
 
+
 (defn fetch-fauna-key*
   [jwt]
   (-> (js/fetch
-        ".netlify/functions/faunakey"
+        "/.netlify/functions/faunakey"
         #js {:headers #js {"Content-Type" "application/json"
                            "Authorization" (str "Bearer " jwt)}})
       (.then (fn [resp]
-               (if (= (.-status resp) 200)
-                 (js/console.log "fk" (.json resp)))))))
+               (if (.-ok resp)
+                 (-> (.json resp)
+                     (.then (fn [body]
+                              (js/console.log "fk" body)
+                              (swap! state assoc :ready? true :fauna-key (.-faunaKey body))))))
+               (do
+                 (js/console.error "non 200 trying to get fauna key")
+                 (swap! state assoc :error true))))))
 
 
 (defn fetch-fauna-key
