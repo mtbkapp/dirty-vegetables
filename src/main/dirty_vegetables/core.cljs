@@ -1,5 +1,6 @@
 (ns dirty-vegetables.core
-  (:require [clojure.spec.alpha :as spec]))
+  (:require [clojure.spec.alpha :as spec]
+            [clojure.string :as string]))
 
 
 (def units {"cup" {:unit/type :unit.type/volume
@@ -26,6 +27,10 @@
             "count" {:unit/type :unit.type/quantity
                      :unit/name "count"
                      :unit/factor 1}})
+
+(defn units-of-type
+  [unit-type]
+  (filter #(= unit-type (:unit/type %)) (vals units)))
 
 
 (def integer-pattern #"\d+")
@@ -58,9 +63,6 @@
 (spec/def :ingredient/input
   (spec/keys :req [:ingredient/name :ingredient/calorie-density]))
 
-(spec/def :ingredient/db
-  (spec/keys :req [:ingredient/name :ingredient/calorie-density]))
-
 (spec/def :ingredient/calorie-density
   (spec/map-of :unit/type (spec/keys :req [:calorie-density/measurement
                                            :calorie-density/calories])))
@@ -68,7 +70,7 @@
 (spec/def :calorie-density/measurement :input/measurement)
 (spec/def :calorie-density/calories integer?)
 
-
+(spec/def :db/id any?)
 (spec/def :ingredient/id :db/id)
 (spec/def :ingredient/name :input/name)
 
@@ -107,6 +109,28 @@
           (= kind :integer) (js/parseInt v 10))))
 
 
+(defn sub-ingredients
+  [recipe ingredients]
+  (update recipe 
+          :recipe/ingredients
+          (fn [is]
+            (map (fn [{:keys [ingredient/id] :as ri}]
+                   (assoc ri
+                          :ingredient
+                          (get ingredients id)))
+                 is))))
+
+
+(defn calc-ingredient-density
+  [ingredient unit-type]
+  (let [density (get-in ingredient [:ingredient/calorie-density unit-type])
+        [m u] (:calorie-density/measurement density)
+        cal (:calorie-density/calories density)
+        measure (read-input-number m)
+        {factor :unit/factor} (get units u)]
+    (/ cal (* measure factor))))
+
+
 (defn calories-in
   "Calculates the total calories for the recipe"
   [{:keys [recipe/ingredients] :as recipe}]
@@ -121,8 +145,8 @@
 
 (defn how-much
   "Calculate how many calories are in a given amount of a recipe"
-  [recipe amount unit-name]
-  (let [total-calories (calories-in (sub-ingredients recipe test-ingredients))
+  [recipe ingredients amount unit-name]
+  (let [total-calories (calories-in (sub-ingredients recipe ingredients))
         amount-unit (get units unit-name)
         [total-amount total-unit] (get-in recipe [:recipe/totals (:unit/type amount-unit)])
         total-amount-in-base (* (read-input-number total-amount)
