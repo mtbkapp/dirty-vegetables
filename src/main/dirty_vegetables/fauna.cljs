@@ -53,6 +53,7 @@
                  (-> (.json resp)
                      (.then (fn [body]
                               (js/console.log "got fuana key")
+                              (js/console.log body)
                               (reset! db-key (.-faunaKey ^object body)))))
                  (js/console.error "non 200 trying to get fauna key"))))))
 
@@ -77,6 +78,7 @@
 (defn on-key-change
   [cb]
   (fn [_ _ old-key new-key]
+    (js/console.log ">>>>" new-key)
     (if (nil? new-key)
       (cb :logout)
       (cb :login))))
