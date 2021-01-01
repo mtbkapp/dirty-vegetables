@@ -53,7 +53,7 @@
                  (-> (.json resp)
                      (.then (fn [body]
                               (js/console.log "got fuana key")
-                              (js/console.log "fk" (.-faunaKey ^object body))
+                              (js/console.log "fk" body)
                               (reset! db-key (.-faunaKey ^object body)))))
                  (js/console.error "non 200 trying to get fauna key"))))))
 
