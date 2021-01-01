@@ -70,6 +70,7 @@
 (defn scaffold
   []
   (let [{auth? :auth? [route & args] :route} @router-state]
+    (js/console.log auth? route args)
     [:div
      [header]
      (if auth?
@@ -84,7 +85,6 @@
 
 (defn init
   []
-  #_(id/start!)
   (fauna/init! handle-auth-event)
   (route/start! router {:default :app/home 
                         :on-navigate on-navigate})

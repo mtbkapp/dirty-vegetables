@@ -51,6 +51,7 @@
                  (-> (.json resp)
                      (.then (fn [body]
                               (js/console.log "got fuana key")
+                              (js/console.log "fk" (.-faunaKey ^object body))
                               (reset! db-key (.-faunaKey ^object body)))))
                  (js/console.error "non 200 trying to get fauna key"))))))
 
@@ -86,3 +87,4 @@
   (add-watch db-key :cb (on-key-change cb))
   (reset! db-key (get-ls-key))
   (attach-identity-events))
+
