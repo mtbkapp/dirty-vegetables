@@ -1,5 +1,7 @@
 (ns dirty-vegetables.fauna
-  (:require ["faunadb" :as f]))
+  (:require [clojure.set :as sets]
+            [clojure.walk :as walk]
+            ["faunadb" :as f]))
 
 
 (def db-key (atom nil))
@@ -88,3 +90,69 @@
   (reset! db-key (get-ls-key))
   (attach-identity-events))
 
+
+(defn save-ingredient
+  [ingredient]
+  (js/Promise.
+    (fn [resv rej]
+      (if-let [fk @db-key]
+        (-> (.query (f/Client. #js {:secret fk})
+                    (f/query.Create
+                      (f/query.Collection "ingredients")
+                      #js {:data (clj->js (walk/stringify-keys ingredient))}))
+            (.then resv)
+            (.catch (fn [err]
+                      (js/console.error err)
+                      (rej ::save-error))))
+        (rej ::no-key)))))
+
+
+(def ingredient-key-map
+  {"name" :ingredient/name
+   "calorie-density" :ingredient/calorie-density
+   "volume" :unit.type/volume 
+   "mass" :unit.type/mass
+   "quantity" :unit.type/quantity
+   "measurement" :calorie-density/measurement
+   "calories" :calorie-density/calories})
+
+
+(defn from-fauna
+  [resp key-map]
+  (walk/postwalk
+    (fn [x]
+      (if (map? x)
+        (sets/rename-keys x key-map)
+        x))
+    (js->clj (.map (.-data resp)
+                   (fn [x]
+                     #js {"id" (.-id (.-ref x))
+                          "data" (.-data x)})))))
+
+
+(defn read-data
+  [query]
+  (js/Promise.
+    (fn [resv rej]
+      (if-let [fk @db-key]
+        (-> (.query (f/Client. #js {:secret fk}) query)
+            (.then (fn [resp]
+                     (resv (from-fauna resp ingredient-key-map))))
+            (.catch (fn [err]
+                      (js/console.error err)
+                      (rej ::read-error))))
+        (rej ::no-key)))))
+
+
+(def all-ingredients-query
+  (f/query.Map
+    (f/query.Paginate 
+      (f/query.Documents
+        (f/query.Collection "ingredients"))
+      #js {:size 10000})
+    (f/query.Lambda "x" (f/query.Get (f/query.Var "x")))))
+
+
+(defn fetch-all-ingredients
+  []
+  (read-data all-ingredients-query))

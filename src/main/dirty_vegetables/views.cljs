@@ -1,6 +1,7 @@
 (ns dirty-vegetables.views
   (:require [clojure.spec.alpha :as spec]
             [dirty-vegetables.core :as core]
+            [dirty-vegetables.fauna :as fauna]
             [reagent.core :as r]
             [reagent.dom :as rd]))
 
@@ -10,12 +11,38 @@
   [:div "home"])
 
 
+(def fauna-err->msg
+  {::fauna/no-key "Db key not set. How'd you get here?"
+   ::fauna/not-implemented "Not implemented."
+   ::fauna/save-error "Error saving to database."
+   ::fauna/read-error "Error reading from the database."})
+
+
 (defn ingredient-list
-  [[params query]]
-  [:div {:id "ingredient-list"}
-   [:div [:h2 "Ingredients"]
-    [:a {:href "#/ingredients/new"} "New Ingredient"]
-    ]])
+  [_]
+  (let [state (r/atom {:error nil :fetching? true})]
+    (-> (fauna/fetch-all-ingredients)
+        (.then (fn [data]
+                 (swap! state assoc :fetching? false :data data)))
+        (.catch (fn [err]
+                  (swap! state
+                         assoc
+                         :error (fauna-err->msg err)
+                         :fetching? false))))
+    (fn []
+      (let [{:keys [error fetching? data]} @state]
+        [:div {:id "ingredient-list"}
+         [:div [:h2 "Ingredients"]
+          [:a {:href "#/ingredients/new"} "New Ingredient"]
+          (cond fetching? [:div "Loading..."]
+                (some? error) [:span {:class "error"} error]
+                :else (into [:ul]
+                            (map (fn [{:strs [id data]}]
+                                   [:li 
+                                    [:a 
+                                     {:href (str "#/ingredients/" id)}
+                                     (:ingredient/name data)]]))
+                            data))]]))))
 
 
 (defn on-cancel-click
@@ -113,7 +140,7 @@
 
 (defn validate-ingredient
   [ingredient]
-  (->> (update ingredient :ingredient/calorie-density clean-densities)
+  (->> ingredient 
        (spec/explain-data :ingredient/input)
        (:cljs.spec.alpha/problems)
        (map (fn [{:keys [path] :as problem}]
@@ -133,9 +160,21 @@
 
 (defn on-ingredient-save-click
   [error-ref ingredient]
-  (let [es (validate-ingredient ingredient)]
+  (let [cleaned (update ingredient :ingredient/calorie-density clean-densities)
+        es (validate-ingredient cleaned)]
     (if (empty? es)
-      (reset! error-ref [])
+      ; save ingredient
+      ; * disable buttons
+      ; * dispatch save
+      ; * on success -> nav back 
+      ; * on fail -> show error, renable save button
+      (do 
+        (reset! error-ref [])
+        (-> (fauna/save-ingredient cleaned)
+            (.then (fn []
+                     (js/history.back)))
+            (.catch (fn [err]
+                      (reset! error-ref [(fauna-err->msg err)])))))
       (reset! error-ref es))))
 
 
@@ -158,11 +197,11 @@
           (swap! state assoc :ingredient/name new-name))]
        [:h4 "Calorie Density"]
        [calorie-density-input
-        :unit.type/mass
+        :unit.type/volume
         (:ingredient/calorie-density @state)
         update-density!]
        [calorie-density-input
-        :unit.type/volume
+        :unit.type/mass
         (:ingredient/calorie-density @state)
         update-density!]
        [calorie-density-input
@@ -196,8 +235,8 @@
 
 
 (defn recipe-list
-  [[params query]]
-  [:div "recipe-list"])
+  [_]
+  [:div {:class "recipe-list"} "recipe list"])
 
 
 (defn recipe-detail

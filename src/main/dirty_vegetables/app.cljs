@@ -31,28 +31,12 @@
    :app/recipe-list views/recipe-list
    :app/recipe-detail views/recipe-detail})
 
-;    <header>
-;      <h1>Dirty Vegetables</h1>
-;      <div class="sub-header">
-;        <ul class="nav">
-;          <li>
-;            <a href="#/home">How Many?</a>
-;          </li>
-;          <li>
-;            <a href="#/ingredients">Ingredients</a>
-;          </li>
-;          <li>
-;            <a href="#/recipes">Recipe</a>
-;          </li>
-;        </ul>
-;        <div class="auth" data-netlify-identity-menu></div>
-;      </div>
-;    </header>
 
 (defn  on-reset-key-click
   [e]
   (.preventDefault e)
   (fauna/reset-manaul-key))
+
 
 (defn header
   []
