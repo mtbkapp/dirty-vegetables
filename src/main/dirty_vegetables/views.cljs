@@ -1,5 +1,6 @@
 (ns dirty-vegetables.views
-  (:require [dirty-vegetables.core :as core]
+  (:require [clojure.spec.alpha :as spec]
+            [dirty-vegetables.core :as core]
             [reagent.core :as r]
             [reagent.dom :as rd]))
 
@@ -23,9 +24,57 @@
     (js/history.back)))
 
 
+(defn validate-ingredient
+  [ingredient]
+  
+  )
+
+(defn empty-val?
+  [x]
+  (or (nil? x) (= "" x)))
+
+
+(defn parse-int
+  [x]
+  (let [p (js/parseInt x 10)]
+    (if (not (js/isNaN p))
+      p)))
+
+
+(defn clean-densities
+  [ds]
+  (reduce (fn [new-ds [unit-type {c :calorie-density/calories
+                                  [n unit-name] :calorie-density/measurement}]]
+            (if (and (empty-val? c)
+                     (empty-val? n))
+              (dissoc new-ds unit-type)
+              (update-in new-ds [unit-type :calorie-density/calories] parse-int)))
+          ds
+          ds))
+
+
+(defn spec-problem->message
+  [{:keys [path] :as problem}]
+  (let [[p0 p1 p2] path]
+    (cond (= [:ingredient/calorie-density] path)
+          "At least one calorie density must be entered."
+          (and (= :ingredient/calorie-density p0)
+               (= :calorie-density/calories p2))
+          "Calories must be a whole number."
+          (and (= :ingredient/calorie-density p0)
+               (= :calorie-density/measurement p2))
+          "Measurement must a whole number, a decimal, or a fraction."
+          (= [:ingredient/name] path)
+          "Ingredient name must not be empty.")))
+
+
 (defn on-ingredient-save-click
   [ingredient]
-  (prn "save" ingredient))
+  (prn
+    (map spec-problem->message
+         (:cljs.spec.alpha/problems
+           (spec/explain-data :ingredient/input
+                              (update ingredient :ingredient/calorie-density clean-densities))))))
 
 
 (defn name-input
@@ -47,13 +96,16 @@
 (defn calorie-density-input
   [unit-type density on-change]
   (let [density-for-unit (get density unit-type)
-        [number unit-name] (:calorie-density/measure density-for-unit)
+        [number unit-name] (:calorie-density/measurement density-for-unit)
         calories (:calorie-density/calories density-for-unit)
         trigger-change (fn [n u c]
                          (on-change 
                            unit-type
-                           {:calorie-density/measure [n u]
-                            :calorie-density/calories c}))]
+                           {:calorie-density/measurement [n u]
+                            :calorie-density/calories c}))
+        unit-options (map (fn [unit]
+                            [:option {:value (:unit/name unit)} (:unit/name unit)])
+                          (core/units-of-type unit-type))]
     [:div
      [:label (unit-type->label unit-type)]
      [:input {:type "text"
@@ -69,9 +121,7 @@
                                     number
                                     (.-value (.-target e))
                                     calories))}]
-           (map (fn [unit]
-                  [:option {:value (:unit/name unit)} (:unit/name unit)])
-                (core/units-of-type unit-type)))
+           unit-options)
      [:input {:type "number"
               :value (str calories)
               :on-change (fn [e]
@@ -115,9 +165,16 @@
         [:button {:type "button" :on-click #(on-ingredient-save-click @state)} "Save"]]])))
 
 
+(def default-mass-unit "gram")
+(def default-volume-unit "cup")
+(def default-quantity-unit "count")
+
+
 (def new-ingredient
   {:ingredient/name "New Ingredient" 
-   :ingredient/calorie-density {}})
+   :ingredient/calorie-density {:unit.type/mass {:calorie-density/measurement [nil default-mass-unit]}
+                                :unit.type/volume {:calorie-density/measurement [nil default-volume-unit]}
+                                :unit.type/quantity {:calorie-density/measurement [nil default-quantity-unit]}}})
 
 
 (defn ingredient-detail

@@ -30,6 +30,6 @@ header ul {
 
 }
 
-#manual-fauna-key .error {
+.error {
   color: red;
 }

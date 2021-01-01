@@ -64,8 +64,10 @@
   (spec/keys :req [:ingredient/name :ingredient/calorie-density]))
 
 (spec/def :ingredient/calorie-density
-  (spec/map-of :unit/type (spec/keys :req [:calorie-density/measurement
-                                           :calorie-density/calories])))
+  (spec/and
+    (spec/map-of :unit/type (spec/keys :req [:calorie-density/measurement
+                                             :calorie-density/calories]))
+    #(< 0 (count %))))
 
 (spec/def :calorie-density/measurement :input/measurement)
 (spec/def :calorie-density/calories integer?)
