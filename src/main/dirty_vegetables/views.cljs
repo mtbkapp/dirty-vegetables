@@ -18,6 +18,11 @@
    ::fauna/read-error "Error reading from the database."})
 
 
+(defn target-val
+  [e]
+  (.-value (.-target e)))
+
+
 (defn ingredient-list
   [_]
   (let [state (r/atom {:error nil :fetching? true})]
@@ -70,7 +75,7 @@
    [:input {:id "ingredient-name"
             :type "text"
             :value value 
-            :on-change #(on-change (.-value (.-target %)))}]])
+            :on-change #(on-change (target-val %))}]])
 
 
 (def unit-type->label
@@ -97,24 +102,21 @@
      [:input {:type "text"
               :value (str number)
               :on-change (fn [e]
-                           (trigger-change
-                             (.-value (.-target e)) 
-                             unit-name
-                             calories))}]
+                           (trigger-change (target-val e)
+                                           unit-name
+                                           calories))}]
      (into [:select {:value (str unit-name)
                      :on-change (fn [e]
-                                  (trigger-change
-                                    number
-                                    (.-value (.-target e))
-                                    calories))}]
+                                  (trigger-change number
+                                                  (target-val e)
+                                                  calories))}]
            unit-options)
      [:input {:type "number"
               :value (str calories)
               :on-change (fn [e]
-                           (trigger-change
-                             number
-                             unit-name
-                             (.-value (.-target e))))}]]))
+                           (trigger-change number
+                                           unit-name
+                                           (target-val e)))}]]))
 
 (defn error-list
   [errors]

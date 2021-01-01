@@ -2,6 +2,8 @@
   (:require [bide.core :as route]
             [dirty-vegetables.fauna :as fauna]
             [dirty-vegetables.views :as views]
+            [oops.core :refer [oget oset! ocall oapply ocall! oapply!
+                               oget+ oset!+ ocall+ oapply+ ocall!+ oapply!+]]
             [reagent.core :as r]
             [reagent.dom :as rd]))
 
@@ -34,7 +36,7 @@
 
 (defn  on-reset-key-click
   [e]
-  (.preventDefault e)
+  (ocall e "preventDefault")
   (fauna/reset-manaul-key))
 
 
@@ -54,7 +56,6 @@
 (defn scaffold
   []
   (let [{auth? :auth? [route & args] :route} @router-state]
-    (js/console.log auth? route args)
     [:div
      [header]
      (if auth?

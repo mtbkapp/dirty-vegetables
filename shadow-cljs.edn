@@ -10,7 +10,9 @@
  [; react wrapper
   [reagent "1.0.0"]
   ; routing
-  [funcool/bide "1.6.0"]]
+  [funcool/bide "1.6.0"]
+  ; cuz advanced compilation screws with things
+  [binaryage/oops "0.7.0"]]
 
  :builds
  {:frontend

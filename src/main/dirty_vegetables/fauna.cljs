@@ -1,6 +1,8 @@
 (ns dirty-vegetables.fauna
   (:require [clojure.set :as sets]
             [clojure.walk :as walk]
+            [oops.core :refer [oget oset! ocall oapply ocall! oapply!
+                               oget+ oset!+ ocall+ oapply+ ocall!+ oapply!+]]
             ["faunadb" :as f]))
 
 
@@ -9,8 +11,9 @@
 
 (defn test-key
   [fk]
-  (.query (f/Client. #js {:secret fk})
-          (f/query.Create
+  (ocall (f/Client. #js {:secret fk})
+         "query"
+         (f/query.Create
             (f/query.Collection "test")
             #js {:data #js {:x (js/Math.random)}})))
 
@@ -49,12 +52,12 @@
         #js {:headers #js {"Content-Type" "application/json"
                            "Authorization" (str "Bearer " jwt)}})
       (.then (fn [resp]
-               (if (.-ok resp)
-                 (-> (.json resp)
+               (if (oget resp "ok")
+                 (-> (ocall resp "json")
                      (.then (fn [body]
                               (js/console.log "got fuana key")
                               (js/console.log body)
-                              (reset! db-key (.-faunaKey ^object body)))))
+                              (reset! db-key (oget body "faunaKey")))))
                  (js/console.error "non 200 trying to get fauna key"))))))
 
 
@@ -62,7 +65,7 @@
   []
   (js/console.log "attempting to fetch fauna key")
   (if-let [user (js/netlifyIdentity.currentUser)]
-    (-> (.jwt user)
+    (-> (ocall user "jwt")
         (.then fetch-fauna-key*)
         (.catch (fn [err]
                   (js/console.error "error getting netlify jwt" err))))
@@ -97,10 +100,12 @@
   (js/Promise.
     (fn [resv rej]
       (if-let [fk @db-key]
-        (-> (.query (f/Client. #js {:secret fk})
-                    (f/query.Create
+        (-> (ocall (f/Client. #js {:secret fk})
+                   "query"
+                   (f/query.Create
                       (f/query.Collection "ingredients")
-                      #js {:data (clj->js (walk/stringify-keys ingredient))}))
+                      #js {:data (clj->js (walk/stringify-keys ingredient))})
+                   )
             (.then resv)
             (.catch (fn [err]
                       (js/console.error err)
@@ -125,10 +130,12 @@
       (if (map? x)
         (sets/rename-keys x key-map)
         x))
-    (js->clj (.map (.-data resp)
-                   (fn [x]
-                     #js {"id" (.-id (.-ref x))
-                          "data" (.-data x)})))))
+    (js->clj 
+      (ocall (oget resp "data")
+             "map"
+             (fn [x]
+               #js {"id" (oget (oget x "ref") "id")
+                    "data" (oget x "data")})))))
 
 
 (defn read-data
@@ -136,7 +143,7 @@
   (js/Promise.
     (fn [resv rej]
       (if-let [fk @db-key]
-        (-> (.query (f/Client. #js {:secret fk}) query)
+        (-> (ocall (f/Client. #js {:secret fk}) "query" query)
             (.then (fn [resp]
                      (resv (from-fauna resp ingredient-key-map))))
             (.catch (fn [err]
