@@ -13,7 +13,7 @@ exports.handler = async function(event, context) {
     console.log('valid user', user);
     return {
       statusCode: 200,
-      body: JSON.stringify({ fuanaKey: getFaunaClientKey() }) 
+      body: JSON.stringify({ faunaKey: getFaunaClientKey() }) 
     };
   } 
 
