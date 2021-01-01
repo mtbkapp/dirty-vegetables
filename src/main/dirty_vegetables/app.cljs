@@ -1,7 +1,7 @@
 (ns dirty-vegetables.app
   (:require [bide.core :as route]
+            [dirty-vegetables.fauna :as fauna]
             [dirty-vegetables.views :as views]
-            [dirty-vegetables.identity :as id]
             [reagent.core :as r]
             [reagent.dom :as rd]))
 
@@ -21,7 +21,7 @@
 (defn on-navigate
   "A function which will be called on each route change."
   [name params query]
-  (reset! router-state [name params query]))
+  (swap! router-state assoc :route [name params query]))
 
 
 (def views
@@ -31,18 +31,61 @@
    :app/recipe-list views/recipe-list
    :app/recipe-detail views/recipe-detail})
 
+;    <header>
+;      <h1>Dirty Vegetables</h1>
+;      <div class="sub-header">
+;        <ul class="nav">
+;          <li>
+;            <a href="#/home">How Many?</a>
+;          </li>
+;          <li>
+;            <a href="#/ingredients">Ingredients</a>
+;          </li>
+;          <li>
+;            <a href="#/recipes">Recipe</a>
+;          </li>
+;        </ul>
+;        <div class="auth" data-netlify-identity-menu></div>
+;      </div>
+;    </header>
+
+(defn  on-reset-key-click
+  [e]
+  (.preventDefault e)
+  (fauna/reset-manaul-key))
+
+(defn header
+  []
+  [:header
+   [:h1 "Dirty Vegetables"]
+   [:div {:class "sub-header"}
+    [:ul {:class "nav"}
+     [:li [:a {:href "#/home"} "How Many?"]]
+     [:li [:a {:href "#/ingredients"} "Ingredients"]]
+     [:li [:a {:href "#/recipes"} "Recipe"]]
+     [:li [:a {:href "#/" :on-click on-reset-key-click} "db"]]]
+    [:div {:class "auth" :data-netlify-identity-menu true}]]])
+
 
 (defn scaffold
   []
-  (let [[route & args] @router-state]
-    (if (id/ready? @id/state)
-      [(get views route) args]
-      [:div "Please login or enter db key" [id/manual-fauna-key]])))
+  (let [{auth? :auth? [route & args] :route} @router-state]
+    [:div
+     [header]
+     (if auth?
+       [(get views route) args]
+       "Please login or enter a db key") ]))
+
+
+(defn handle-auth-event
+  [ev]
+  (swap! router-state assoc :auth? (= ev :login)))
 
 
 (defn init
   []
-  (id/start!)
+  #_(id/start!)
+  (fauna/init! handle-auth-event)
   (route/start! router {:default :app/home 
                         :on-navigate on-navigate})
   (rd/render [scaffold] (js/document.getElementById "app")))

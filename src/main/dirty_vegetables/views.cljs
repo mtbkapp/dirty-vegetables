@@ -24,11 +24,6 @@
     (js/history.back)))
 
 
-(defn validate-ingredient
-  [ingredient]
-  
-  )
-
 (defn empty-val?
   [x]
   (or (nil? x) (= "" x)))
@@ -39,42 +34,6 @@
   (let [p (js/parseInt x 10)]
     (if (not (js/isNaN p))
       p)))
-
-
-(defn clean-densities
-  [ds]
-  (reduce (fn [new-ds [unit-type {c :calorie-density/calories
-                                  [n unit-name] :calorie-density/measurement}]]
-            (if (and (empty-val? c)
-                     (empty-val? n))
-              (dissoc new-ds unit-type)
-              (update-in new-ds [unit-type :calorie-density/calories] parse-int)))
-          ds
-          ds))
-
-
-(defn spec-problem->message
-  [{:keys [path] :as problem}]
-  (let [[p0 p1 p2] path]
-    (cond (= [:ingredient/calorie-density] path)
-          "At least one calorie density must be entered."
-          (and (= :ingredient/calorie-density p0)
-               (= :calorie-density/calories p2))
-          "Calories must be a whole number."
-          (and (= :ingredient/calorie-density p0)
-               (= :calorie-density/measurement p2))
-          "Measurement must a whole number, a decimal, or a fraction."
-          (= [:ingredient/name] path)
-          "Ingredient name must not be empty.")))
-
-
-(defn on-ingredient-save-click
-  [ingredient]
-  (prn
-    (map spec-problem->message
-         (:cljs.spec.alpha/problems
-           (spec/explain-data :ingredient/input
-                              (update ingredient :ingredient/calorie-density clean-densities))))))
 
 
 (defn name-input
@@ -130,6 +89,55 @@
                              unit-name
                              (.-value (.-target e))))}]]))
 
+(defn error-list
+  [errors]
+  (when (not-empty errors)
+    [:div {:class "error"} "Errors:"
+     (into [:ul]
+           (map (fn [e]
+                  [:li e])
+                errors))]))
+
+
+(defn clean-densities
+  [ds]
+  (reduce (fn [new-ds [unit-type {c :calorie-density/calories
+                                  [n unit-name] :calorie-density/measurement}]]
+            (if (and (empty-val? c)
+                     (empty-val? n))
+              (dissoc new-ds unit-type)
+              (update-in new-ds [unit-type :calorie-density/calories] parse-int)))
+          ds
+          ds))
+
+
+(defn validate-ingredient
+  [ingredient]
+  (->> (update ingredient :ingredient/calorie-density clean-densities)
+       (spec/explain-data :ingredient/input)
+       (:cljs.spec.alpha/problems)
+       (map (fn [{:keys [path] :as problem}]
+              (let [[p0 p1 p2] path]
+                (cond (= [:ingredient/calorie-density] path)
+                      "At least one calorie density must be entered."
+                      (and (= :ingredient/calorie-density p0)
+                           (= :calorie-density/calories p2))
+                      "Calories must be a whole number."
+                      (and (= :ingredient/calorie-density p0)
+                           (= :calorie-density/measurement p2))
+                      "Measurement must a whole number, a decimal, or a fraction."
+                      (= [:ingredient/name] path)
+                      "Ingredient name must not be empty."))))
+       (distinct)))
+
+
+(defn on-ingredient-save-click
+  [error-ref ingredient]
+  (let [es (validate-ingredient ingredient)]
+    (if (empty? es)
+      (reset! error-ref [])
+      (reset! error-ref es))))
+
 
 (defn ingredient-detail*
   [ingredient]
@@ -138,7 +146,8 @@
                           (swap! state
                                  assoc-in 
                                  [:ingredient/calorie-density unit-type]
-                                 new-density))]
+                                 new-density))
+        errors (r/atom [])]
     (fn []
       [:div
        [name-input 
@@ -162,7 +171,10 @@
         update-density!]
        [:div
         [:button {:type "button" :on-click on-cancel-click} "Cancel"]
-        [:button {:type "button" :on-click #(on-ingredient-save-click @state)} "Save"]]])))
+        [:button {:type "button"
+                  :on-click #(on-ingredient-save-click errors @state)}
+         "Save"]]
+       [error-list @errors]])))
 
 
 (def default-mass-unit "gram")
