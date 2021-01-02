@@ -42,11 +42,11 @@
           (cond fetching? [:div "Loading..."]
                 (some? error) [:span {:class "error"} error]
                 :else (into [:ul]
-                            (map (fn [{:strs [id data]}]
+                            (map (fn [in]
                                    [:li 
                                     [:a 
-                                     {:href (str "#/ingredients/" id)}
-                                     (:ingredient/name data)]]))
+                                     {:href (str "#/ingredients/" (:db/id in))}
+                                     (:ingredient/name in)]]))
                             data))]]))))
 
 
@@ -165,11 +165,6 @@
   (let [cleaned (update ingredient :ingredient/calorie-density clean-densities)
         es (validate-ingredient cleaned)]
     (if (empty? es)
-      ; save ingredient
-      ; * disable buttons
-      ; * dispatch save
-      ; * on success -> nav back 
-      ; * on fail -> show error, renable save button
       (do 
         (reset! error-ref [])
         (-> (fauna/save-ingredient cleaned)
@@ -218,22 +213,18 @@
        [error-list @errors]])))
 
 
-(def default-mass-unit "gram")
-(def default-volume-unit "cup")
-(def default-quantity-unit "count")
-
-
-(def new-ingredient
-  {:ingredient/name "New Ingredient" 
-   :ingredient/calorie-density {:unit.type/mass {:calorie-density/measurement [nil default-mass-unit]}
-                                :unit.type/volume {:calorie-density/measurement [nil default-volume-unit]}
-                                :unit.type/quantity {:calorie-density/measurement [nil default-quantity-unit]}}})
-
-
 (defn ingredient-detail
   [[{:keys [id]} query]]
-  (if (= "new" id)
-    [ingredient-detail* new-ingredient]))
+  (let [loading (r/atom nil)]
+    (-> (fauna/read-single-ingredient id)
+        (.then #(reset! loading %))
+        (.catch #(reset! loading :error)))
+    (fn []
+      (let [x @loading]
+        (prn "detail" x)
+        (cond (nil? x) [:div "Loading..."]
+              (= :error x) [:div "Error loading ingredient"]
+              :else (ingredient-detail* x))))))
 
 
 (defn recipe-list

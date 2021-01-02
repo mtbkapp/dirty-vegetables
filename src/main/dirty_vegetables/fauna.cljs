@@ -81,7 +81,6 @@
 (defn on-key-change
   [cb]
   (fn [_ _ old-key new-key]
-    (js/console.log ">>>>" new-key)
     (if (nil? new-key)
       (cb :logout)
       (cb :login))))
@@ -114,38 +113,52 @@
 
 
 (def ingredient-key-map
-  {"name" :ingredient/name
-   "calorie-density" :ingredient/calorie-density
-   "volume" :unit.type/volume 
-   "mass" :unit.type/mass
-   "quantity" :unit.type/quantity
-   "measurement" :calorie-density/measurement
-   "calories" :calorie-density/calories})
+  {:id :db/id
+   :name :ingredient/name
+   :calorie-density :ingredient/calorie-density
+   :volume :unit.type/volume 
+   :mass :unit.type/mass
+   :quantity :unit.type/quantity
+   :measurement :calorie-density/measurement
+   :calories :calorie-density/calories})
 
 
 (defn from-fauna
-  [resp key-map]
-  (walk/postwalk
-    (fn [x]
-      (if (map? x)
-        (sets/rename-keys x key-map)
-        x))
-    (js->clj 
-      (ocall (oget resp "data")
-             "map"
-             (fn [x]
-               #js {"id" (oget (oget x "ref") "id")
-                    "data" (oget x "data")})))))
+  [resp]
+  (let [data (oget resp "data")]
+    (js->clj
+      (cond (object? data) (oset! data "id" (oget (oget resp "ref") "id"))
+            (array? data) (ocall data
+                                 "map"
+                                 (fn [x]
+                                   (let [id (oget (oget x "ref") "id")
+                                         data (oget x "data")]
+                                     ; TODO figure out why I can't use oset!
+                                     (aset data "id" id)
+                                     data)))
+            :else data)
+      :keywordize-keys true)))
+
+
+(defn key-map-xform
+  [key-map]
+  (fn [data]
+    (walk/postwalk
+      (fn [x]
+        (if (map? x)
+          (sets/rename-keys x key-map)
+          x))
+      data)))
 
 
 (defn read-data
-  [query]
+  [query xform]
   (js/Promise.
     (fn [resv rej]
       (if-let [fk @db-key]
         (-> (ocall (f/Client. #js {:secret fk}) "query" query)
             (.then (fn [resp]
-                     (resv (from-fauna resp ingredient-key-map))))
+                     (resv (xform (from-fauna resp)))))
             (.catch (fn [err]
                       (js/console.error err)
                       (rej ::read-error))))
@@ -163,4 +176,45 @@
 
 (defn fetch-all-ingredients
   []
-  (read-data all-ingredients-query))
+  (read-data all-ingredients-query (key-map-xform ingredient-key-map)))
+
+
+(def default-mass-unit "gram")
+(def default-volume-unit "cup")
+(def default-quantity-unit "count")
+
+
+(def default-densities
+  {:unit.type/mass {:calorie-density/measurement [nil default-mass-unit]}
+   :unit.type/volume {:calorie-density/measurement [nil default-volume-unit]}
+   :unit.type/quantity {:calorie-density/measurement [nil default-quantity-unit]}})
+
+
+(def new-ingredient
+  {:db/id "new"
+   :ingredient/name "New Ingredient" 
+   :ingredient/calorie-density default-densities})
+
+
+(defn add-default-densities
+  [ingredient]
+  (update-in ingredient
+             [:data :ingredient/calorie-density]
+             #(merge default-densities %)))
+
+
+(defn read-single-ingredient
+  [id]
+  (if (= id "new")
+    (js/Promise.resolve new-ingredient)
+    (read-data (f/query.Get (f/query.Ref (f/query.Collection "ingredients") id))
+               (comp add-default-densities
+                     (key-map-xform ingredient-key-map)))))
+
+
+(defn update-ingredient-query
+  [id ingredient]
+  (f/query.Update
+    (f/query.Ref (f/query.Collection "ingredients") id)
+    #js {:data (clj->js (walk/stringify-keys ingredient))}))
+
