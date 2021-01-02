@@ -1,5 +1,5 @@
-function getFaunaClientKey() {
-  return process.env.FAUNADB_CLIENT_SECRET;
+function getFaunaKey() {
+  return process.env.FAUNADB_SERVER_SECRET;
 }
 
 function isValidUser(user) {
@@ -13,7 +13,7 @@ exports.handler = async function(event, context) {
     console.log('valid user', user);
     return {
       statusCode: 200,
-      body: JSON.stringify({ faunaKey: getFaunaClientKey() }) 
+      body: JSON.stringify({ faunaKey: getFaunaKey() }) 
     };
   } 
 
