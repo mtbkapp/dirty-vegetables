@@ -56,7 +56,6 @@
                  (-> (ocall resp "json")
                      (.then (fn [body]
                               (js/console.log "got fuana key")
-                              (js/console.log body)
                               (reset! db-key (oget body "faunaKey")))))
                  (js/console.error "non 200 trying to get fauna key"))))))
 
@@ -232,8 +231,44 @@
 
 (defn read-single-ingredient
   [id]
-  (if (= id "new")
+  (if (= id (:db/id new-ingredient))
     (js/Promise.resolve new-ingredient)
     (read-data (f/query.Get (f/query.Ref (f/query.Collection "ingredients") id))
                (comp add-default-densities
                      (key-map-xform ingredient-key-map)))))
+
+
+(def all-recipes-query
+  (f/query.Map
+    (f/query.Paginate 
+      (f/query.Documents
+        (f/query.Collection "recipes"))
+      #js {:size 10000})
+    (f/query.Lambda "x" (f/query.Get (f/query.Var "x")))))
+
+
+(def recipe-key-map
+  {}
+  )
+
+(def new-recipe
+  {:recipe/name "New Recipe"
+   :recipe/notes ""
+   :recipe/ingredients []
+   :recipe/totals {:unit.type/mass [nil default-mass-unit]
+                   :unit.type/volume [nil default-volume-unit]
+                   :unit.type/quantity [nil default-quantity-unit]}})
+
+
+(defn fetch-all-recipes
+  []
+  (read-data all-recipes-query (key-map-xform recipe-key-map)))
+
+
+(defn read-single-recipe
+  [id]
+  (if (= id (:db/id new-recipe))
+    (js/Promise.resolve new-recipe)
+    (read-data (f/query.Get (f/query.Ref (f/query.Collection "recipes") id))
+               (comp add-default-densities
+                     (key-map-xform recipe-key-map)))))

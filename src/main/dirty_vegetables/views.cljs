@@ -228,10 +228,35 @@
 
 (defn recipe-list
   [_]
-  [:div {:class "recipe-list"} "recipe list"])
+  (let [state (r/atom {:error nil :fetching? true})]
+    (-> (fauna/fetch-all-recipes)
+        (.then (fn [data]
+                 (swap! state assoc :fetching? false :data data)))
+        (.catch (fn [err]
+                  (swap! state
+                         assoc
+                         :error (fauna-err->msg err)
+                         :fetching? false))))
+    (fn []
+      (let [{:keys [error fetching? data]} @state]
+        [:div {:id "ingredient-list"}
+         [:div [:h2 "recipe"]
+          [:a {:href "#/recipes/new"} "New Recipe"]
+          (cond fetching? [:div "Loading..."]
+                (some? error) [:span {:class "error"} error]
+                :else (into [:ul]
+                            (map (fn [in]
+                                   [:li 
+                                    [:a 
+                                     {:href (str "#/recipes/" (:db/id in))}
+                                     (:ingredient/name in)]]))
+                            data))]]))))
 
 
 (defn recipe-detail
-  [[params query]]
-  [:div (str "recipe-detail" params)])
+  [[{:keys [id]} query]]
+  (let [loading (r/atom nil)]
+    (-> (fauna/read-single-recipe id)
+        (.then #(reset! loading %))
+        (.catch #(reset! loading :error)))))
 
