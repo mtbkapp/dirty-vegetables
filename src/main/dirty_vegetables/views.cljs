@@ -221,7 +221,6 @@
         (.catch #(reset! loading :error)))
     (fn []
       (let [x @loading]
-        (prn "detail" x)
         (cond (nil? x) [:div "Loading..."]
               (= :error x) [:div "Error loading ingredient"]
               :else (ingredient-detail* x))))))

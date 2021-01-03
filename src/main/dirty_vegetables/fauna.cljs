@@ -94,22 +94,61 @@
   (attach-identity-events))
 
 
-(defn save-ingredient
+(def default-mass-unit "gram")
+(def default-volume-unit "cup")
+(def default-quantity-unit "count")
+
+
+(def default-densities
+  {:unit.type/mass {:calorie-density/measurement [nil default-mass-unit]}
+   :unit.type/volume {:calorie-density/measurement [nil default-volume-unit]}
+   :unit.type/quantity {:calorie-density/measurement [nil default-quantity-unit]}})
+
+
+(def new-ingredient
+  {:db/id "new"
+   :ingredient/name "New Ingredient" 
+   :ingredient/calorie-density default-densities})
+
+
+(defn ingredient-payload
   [ingredient]
+  #js {:data (clj->js (walk/stringify-keys (dissoc ingredient :db/id)))})
+
+
+(defn update-ingredient-query
+  [{:keys [db/id] :as ingredient}]
+  (f/query.Update
+    (f/query.Ref (f/query.Collection "ingredients") id)
+    (ingredient-payload ingredient)))
+
+
+(defn create-ingredient-query
+  [ingredient]
+  (f/query.Create
+    (f/query.Collection "ingredients")
+    (ingredient-payload ingredient)))
+
+
+(defn save-ingredient*
+  [query]
   (js/Promise.
     (fn [resv rej]
       (if-let [fk @db-key]
-        (-> (ocall (f/Client. #js {:secret fk})
-                   "query"
-                   (f/query.Create
-                      (f/query.Collection "ingredients")
-                      #js {:data (clj->js (walk/stringify-keys ingredient))})
-                   )
+        (-> (ocall (f/Client. #js {:secret fk}) "query" query)
             (.then resv)
             (.catch (fn [err]
                       (js/console.error err)
                       (rej ::save-error))))
         (rej ::no-key)))))
+
+
+(defn save-ingredient
+  [ingredient]
+  (save-ingredient*
+    (if (= (:db/id ingredient) (:db/id new-ingredient))
+      (create-ingredient-query ingredient)
+      (update-ingredient-query ingredient))))
 
 
 (def ingredient-key-map
@@ -127,16 +166,21 @@
   [resp]
   (let [data (oget resp "data")]
     (js->clj
-      (cond (object? data) (oset! data "id" (oget (oget resp "ref") "id"))
-            (array? data) (ocall data
-                                 "map"
-                                 (fn [x]
-                                   (let [id (oget (oget x "ref") "id")
-                                         data (oget x "data")]
-                                     ; TODO figure out why I can't use oset!
-                                     (aset data "id" id)
-                                     data)))
-            :else data)
+      (cond (object? data)
+            (let [id (oget (oget resp "ref") "id")]
+              (aset data "id" id)
+              data)
+            (array? data)
+            (ocall data
+                   "map"
+                   (fn [x]
+                     (let [id (oget (oget x "ref") "id")
+                           data (oget x "data")]
+                       ; TODO figure out why I can't use oset!
+                       (aset data "id" id)
+                       data)))
+            :else
+            data)
       :keywordize-keys true)))
 
 
@@ -179,23 +223,6 @@
   (read-data all-ingredients-query (key-map-xform ingredient-key-map)))
 
 
-(def default-mass-unit "gram")
-(def default-volume-unit "cup")
-(def default-quantity-unit "count")
-
-
-(def default-densities
-  {:unit.type/mass {:calorie-density/measurement [nil default-mass-unit]}
-   :unit.type/volume {:calorie-density/measurement [nil default-volume-unit]}
-   :unit.type/quantity {:calorie-density/measurement [nil default-quantity-unit]}})
-
-
-(def new-ingredient
-  {:db/id "new"
-   :ingredient/name "New Ingredient" 
-   :ingredient/calorie-density default-densities})
-
-
 (defn add-default-densities
   [ingredient]
   (update-in ingredient
@@ -210,11 +237,3 @@
     (read-data (f/query.Get (f/query.Ref (f/query.Collection "ingredients") id))
                (comp add-default-densities
                      (key-map-xform ingredient-key-map)))))
-
-
-(defn update-ingredient-query
-  [id ingredient]
-  (f/query.Update
-    (f/query.Ref (f/query.Collection "ingredients") id)
-    #js {:data (clj->js (walk/stringify-keys ingredient))}))
-
