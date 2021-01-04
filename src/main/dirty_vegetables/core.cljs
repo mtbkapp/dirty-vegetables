@@ -83,12 +83,14 @@
                    :recipe/totals]
              :opt [:recipe/notes]))
 
+
 (spec/def :recipe/name :input/name)
 (spec/def :recipe/notes string?)
 (spec/def :recipe/ingredients (spec/coll-of :recipe/ingredient))
 (spec/def :recipe/ingredient
   (spec/keys :req [:input/measurement
                    :ingredient/id]))
+
 
 (spec/def :recipe/totals
   (spec/map-of :unit/type :input/measurement))

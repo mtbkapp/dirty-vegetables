@@ -167,7 +167,7 @@
     (if (empty? es)
       (do 
         (reset! error-ref [])
-        (-> (fauna/save-ingredient cleaned)
+        (-> (fauna/save-rec "ingredients" cleaned)
             (.then (fn []
                      (js/history.back)))
             (.catch (fn [err]
@@ -239,8 +239,8 @@
                          :fetching? false))))
     (fn []
       (let [{:keys [error fetching? data]} @state]
-        [:div {:id "ingredient-list"}
-         [:div [:h2 "recipe"]
+        [:div {:id "recipe-list"}
+         [:div [:h2 "Recipes"]
           [:a {:href "#/recipes/new"} "New Recipe"]
           (cond fetching? [:div "Loading..."]
                 (some? error) [:span {:class "error"} error]
@@ -258,5 +258,8 @@
   (let [loading (r/atom nil)]
     (-> (fauna/read-single-recipe id)
         (.then #(reset! loading %))
-        (.catch #(reset! loading :error)))))
+        (.catch #(reset! loading :error)))
+    (fn []
+      [:div "watman"]
+      )))
 

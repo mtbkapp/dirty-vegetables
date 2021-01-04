@@ -110,26 +110,26 @@
    :ingredient/calorie-density default-densities})
 
 
-(defn ingredient-payload
-  [ingredient]
-  #js {:data (clj->js (walk/stringify-keys (dissoc ingredient :db/id)))})
+(defn write-payload 
+  [rec]
+  #js {:data (clj->js (walk/stringify-keys (dissoc rec :db/id)))})
 
 
-(defn update-ingredient-query
-  [{:keys [db/id] :as ingredient}]
+(defn update-rec-query
+  [coll-name {:keys [db/id] :as rec}]
   (f/query.Update
-    (f/query.Ref (f/query.Collection "ingredients") id)
-    (ingredient-payload ingredient)))
+    (f/query.Ref (f/query.Collection coll-name) id)
+    (write-payload rec)))
 
 
-(defn create-ingredient-query
-  [ingredient]
+(defn create-rec-query
+  [coll-name rec]
   (f/query.Create
-    (f/query.Collection "ingredients")
-    (ingredient-payload ingredient)))
+    (f/query.Collection coll-name)
+    (write-payload rec)))
 
 
-(defn save-ingredient*
+(defn save-rec*
   [query]
   (js/Promise.
     (fn [resv rej]
@@ -142,12 +142,12 @@
         (rej ::no-key)))))
 
 
-(defn save-ingredient
-  [ingredient]
-  (save-ingredient*
-    (if (= (:db/id ingredient) (:db/id new-ingredient))
-      (create-ingredient-query ingredient)
-      (update-ingredient-query ingredient))))
+(defn save-rec
+  [coll-name rec]
+  (save-rec*
+    (if (= "new" (:db/id rec))
+      (create-rec-query coll-name rec)
+      (update-rec-query coll-name rec))))
 
 
 (def ingredient-key-map
@@ -248,13 +248,27 @@
 
 
 (def recipe-key-map
-  {}
-  )
+  {:name :recipe/name
+   :notes :recipe/notes
+   :ingredients :recipe/ingredients
+   :totals :recipe/totals 
+   :id :ingredient/id 
+   :measurement :input/measurement
+   :mass :unit.type/mass
+   :volume :unit.type/volume
+   :quantity :unit.type/quantity})
+
+
+(def new-recipe-ingredient
+  {:input/measurement ["1" "cup"]
+   :ingredient/id nil})
+
 
 (def new-recipe
-  {:recipe/name "New Recipe"
+  {:db/id "new"
+   :recipe/name "New Recipe"
    :recipe/notes ""
-   :recipe/ingredients []
+   :recipe/ingredients [new-recipe-ingredient]
    :recipe/totals {:unit.type/mass [nil default-mass-unit]
                    :unit.type/volume [nil default-volume-unit]
                    :unit.type/quantity [nil default-quantity-unit]}})
@@ -272,3 +286,6 @@
     (read-data (f/query.Get (f/query.Ref (f/query.Collection "recipes") id))
                (comp add-default-densities
                      (key-map-xform recipe-key-map)))))
+
+
+
