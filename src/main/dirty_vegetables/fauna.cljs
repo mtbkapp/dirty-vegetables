@@ -229,7 +229,7 @@
              #(merge default-densities %)))
 
 
-(defn read-single-ingredient
+(defn fetch-single-ingredient
   [id]
   (if (= id (:db/id new-ingredient))
     (js/Promise.resolve new-ingredient)
@@ -259,6 +259,7 @@
    :quantity :unit.type/quantity})
 
 
+; TODO move to core
 (def new-recipe-ingredient
   {:input/measurement ["1" "cup"]
    :ingredient/id nil})
@@ -268,7 +269,7 @@
   {:db/id "new"
    :recipe/name "New Recipe"
    :recipe/notes ""
-   :recipe/ingredients [new-recipe-ingredient]
+   :recipe/ingredients []
    :recipe/totals {:unit.type/mass [nil default-mass-unit]
                    :unit.type/volume [nil default-volume-unit]
                    :unit.type/quantity [nil default-quantity-unit]}})
@@ -279,13 +280,27 @@
   (read-data all-recipes-query (key-map-xform recipe-key-map)))
 
 
-(defn read-single-recipe
+(defn fetch-single-recipe
   [id]
   (if (= id (:db/id new-recipe))
     (js/Promise.resolve new-recipe)
     (read-data (f/query.Get (f/query.Ref (f/query.Collection "recipes") id))
                (comp add-default-densities
                      (key-map-xform recipe-key-map)))))
+
+
+(defn fetch-recipe-and-all-ingredients
+  [id]
+  (js/Promise.
+    (fn [resv rej]
+      (-> (js/Promise.all
+            #js [(fetch-single-recipe id) (fetch-all-ingredients)])
+          (.then (fn [arr]
+                   (resv {:recipe (aget arr 0)
+                          :ingredients (aget arr 1)})))
+          (.catch (fn [err]
+                    (js/console.error "Error in fetch-recipe-and-all-ingredients" err)
+                    (rej err)))))))
 
 
 

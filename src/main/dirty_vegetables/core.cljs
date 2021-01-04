@@ -28,6 +28,9 @@
                      :unit/name "count"
                      :unit/factor 1}})
 
+(def all-units-sorted
+  (sort-by :unit/name (vals units)))
+
 (defn units-of-type
   [unit-type]
   (filter #(= unit-type (:unit/type %)) (vals units)))

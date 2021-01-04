@@ -74,3 +74,8 @@
   (route/start! router {:default :app/home 
                         :on-navigate on-navigate})
   (rd/render [scaffold] (js/document.getElementById "app")))
+
+
+(defn ^:dev/after-load on-code-load
+  []
+  (js/location.reload))

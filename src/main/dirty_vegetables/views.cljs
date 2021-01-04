@@ -1,5 +1,6 @@
 (ns dirty-vegetables.views
   (:require [clojure.spec.alpha :as spec]
+            [clojure.string :as string]
             [dirty-vegetables.core :as core]
             [dirty-vegetables.fauna :as fauna]
             [reagent.core :as r]
@@ -23,12 +24,20 @@
   (.-value (.-target e)))
 
 
+(defn sort-by-lcase
+  [key-fn coll]
+  (sort-by (comp string/lower-case key-fn) coll))
+
+
 (defn ingredient-list
   [_]
   (let [state (r/atom {:error nil :fetching? true})]
     (-> (fauna/fetch-all-ingredients)
         (.then (fn [data]
-                 (swap! state assoc :fetching? false :data data)))
+                 (swap! state 
+                        assoc
+                        :fetching? false
+                        :data (sort-by-lcase :ingredient/name data))))
         (.catch (fn [err]
                   (swap! state
                          assoc
@@ -216,7 +225,7 @@
 (defn ingredient-detail
   [[{:keys [id]} query]]
   (let [loading (r/atom nil)]
-    (-> (fauna/read-single-ingredient id)
+    (-> (fauna/fetch-single-ingredient id)
         (.then #(reset! loading %))
         (.catch #(reset! loading :error)))
     (fn []
@@ -231,7 +240,10 @@
   (let [state (r/atom {:error nil :fetching? true})]
     (-> (fauna/fetch-all-recipes)
         (.then (fn [data]
-                 (swap! state assoc :fetching? false :data data)))
+                 (swap! state
+                        assoc
+                        :fetching? false
+                        :data (sort-by-lcase :recipe/name data))))
         (.catch (fn [err]
                   (swap! state
                          assoc
@@ -253,13 +265,132 @@
                             data))]]))))
 
 
+(defn unit-select
+  [unit-type {:keys [unit-name on-change]}]
+  (let [unit-options (map (fn [unit]
+                            [:option {:value (:unit/name unit)} (:unit/name unit)])
+                          (core/units-of-type unit-type))]
+    (into [:select {:value (str unit-name)
+                    :on-change #(on-change (target-val %))}]
+          unit-options)))
+
+
+(defn recipe-total-input
+  [totals unit-type on-change]
+  (let [[amount unit-name] (get totals unit-type)]
+    [:div
+     [:label (unit-type->label unit-type)]
+     [:input {:value (str amount)
+              :on-change #(on-change [unit-type [(target-val %) unit-name]])}]
+     [unit-select unit-type {:unit-name unit-name 
+                             :on-change #(on-change [unit-type [amount %]])}]]))
+
+
+(defn recipe-totals
+  [totals on-change]
+  [:div [:h4 "Totals:"]
+   [recipe-total-input totals :unit.type/mass on-change]
+   [recipe-total-input totals :unit.type/volume on-change]
+   [recipe-total-input totals :unit.type/quantity on-change]])
+
+
+(defn ingredient-select
+  [{:keys [selected-id all-ingredients on-change]}]
+  (into [:select {:value (str selected-id)
+                  :on-change #(on-change (target-val %))}]
+        (map (fn [{:keys [db/id ingredient/name]}]
+               [:option {:value id} name]))
+        all-ingredients))
+
+
+(defn all-unit-select
+  [{:keys [value on-change]}]
+  (into [:select {:value (str value)
+                  :on-change #(on-change (target-val %))}]
+        (map (fn [{n :unit/name}]
+               [:option {:value n} n]))
+        core/all-units-sorted))
+
+
+(defn recipe-ingredient-line
+  [idx in all-ingredients on-change]
+  (prn in)
+  [:li
+   [:input {:type "name"
+            :value (-> in :input/measurement first)
+            :on-change #(on-change [:update idx (assoc-in in
+                                                          [:input/measurement 0]
+                                                          (target-val %))])}]
+   [all-unit-select {:value (-> in :input/measurement second)
+                     :on-change #(on-change [:update idx (assoc-in in
+                                                                   [:input/measurement 1]
+                                                                   %
+                                                                   )])}]
+   [ingredient-select {:selected-id (:ingredient/id in)
+                       :all-ingredients all-ingredients
+                       :on-change #(on-change [:update idx (assoc in :ingredient/id %)])}]
+   [:button {:type "button" :on-click #(on-change [:delete idx])} "X"]])
+
+
+(defn recipe-ingredient-list
+  [recipe-ingredients all-ingredients on-change]
+  [:div
+   [:h4 "Ingredients:"]
+   (into [:ul {:class "recipe-ingredients"}]
+         (map-indexed (fn [idx in]
+                        [recipe-ingredient-line idx in all-ingredients on-change])
+              recipe-ingredients))
+   [:button {:type "button" :on-click #(on-change [:add])} "Add ingredient to recipe"]])
+
+
+(defn recipe-detail*
+  [{:keys [recipe ingredients]}]
+  (let [errors (r/atom [])
+        sorted-ingredients (sort-by-lcase :ingredient/name ingredients)
+        state (r/atom recipe)]
+    (fn []
+      [:div
+       [name-input
+        "recipe-name"
+        "Recipe Name: "
+        (:recipe/name @state)
+        #(swap! state assoc :recipe/name %)]
+       [recipe-totals 
+        (:recipe/totals @state)
+        (fn [[unit-type new-measure]]
+          (swap! state assoc-in [:recipe/totals unit-type] new-measure))]
+       [recipe-ingredient-list
+        (:recipe/ingredients @state)
+        sorted-ingredients
+        (fn [[method idx new-data]]
+          (swap! state update :recipe/ingredients
+                 (fn [is]
+                   (prn method idx new-data is)
+                   (cond (= :add method) (conj is fauna/new-recipe-ingredient)
+                         (= :delete method) (into (subvec is 0 idx) (subvec is (inc idx)))
+                         (= :update method) (assoc is idx new-data)
+                         :else is))))]
+       [:div
+        [:label {:for "recipe-notes"} [:h4 "Notes:"]]
+        [:textarea
+         {:id "recipe-notes"
+          :on-change #(swap! state assoc :recipe/notes (target-val %)) 
+          :value (:recipe/notes @state)
+          :rows 10
+          :cols 50}]]
+       [:button {:type "button"} "Cancel"]
+       [:button {:type "button"} "Save"]])))
+
+
 (defn recipe-detail
   [[{:keys [id]} query]]
   (let [loading (r/atom nil)]
-    (-> (fauna/read-single-recipe id)
+    (-> (fauna/fetch-recipe-and-all-ingredients id)
         (.then #(reset! loading %))
         (.catch #(reset! loading :error)))
     (fn []
-      [:div "watman"]
-      )))
+      (let [x @loading]
+        (cond (nil? x) [:div "Loading..."]
+              (= :error x) [:div "Error loading recipe"]
+              :else [recipe-detail* x])))))
 
