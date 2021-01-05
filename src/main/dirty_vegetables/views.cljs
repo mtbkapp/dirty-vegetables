@@ -34,7 +34,7 @@
   (let [state (r/atom {:error nil :fetching? true})]
     (-> (fauna/fetch-all-ingredients)
         (.then (fn [data]
-                 (swap! state 
+                 (swap! state
                         assoc
                         :fetching? false
                         :data (sort-by-lcase :ingredient/name data))))
@@ -52,13 +52,14 @@
                 (some? error) [:span {:class "error"} error]
                 :else (into [:ul]
                             (map (fn [in]
-                                   [:li 
-                                    [:a 
+                                   [:li
+                                    [:a
                                      {:href (str "#/ingredients/" (:db/id in))}
                                      (:ingredient/name in)]]))
                             data))]]))))
 
-
+; TODO, only launch dialog when data has changed
+; TODO, confirm on save if data has changed too?
 (defn on-cancel-click
   []
   (if (js/confirm "Are you sure?")
@@ -83,7 +84,7 @@
    [:label {:for "ingredient-name"} label]
    [:input {:id "ingredient-name"
             :type "text"
-            :value value 
+            :value value
             :on-change #(on-change (target-val %))}]])
 
 
@@ -99,7 +100,7 @@
         [number unit-name] (:calorie-density/measurement density-for-unit)
         calories (:calorie-density/calories density-for-unit)
         trigger-change (fn [n u c]
-                         (on-change 
+                         (on-change
                            unit-type
                            {:calorie-density/measurement [n u]
                             :calorie-density/calories c}))
@@ -151,7 +152,7 @@
 
 (defn validate-ingredient
   [ingredient]
-  (->> ingredient 
+  (->> ingredient
        (spec/explain-data :ingredient/input)
        (:cljs.spec.alpha/problems)
        (map (fn [{:keys [path] :as problem}]
@@ -166,6 +167,7 @@
                       "Measurement must a whole number, a decimal, or a fraction."
                       (= [:ingredient/name] path)
                       "Ingredient name must not be empty."))))
+       (remove nil?)
        (distinct)))
 
 
@@ -174,7 +176,7 @@
   (let [cleaned (update ingredient :ingredient/calorie-density clean-densities)
         es (validate-ingredient cleaned)]
     (if (empty? es)
-      (do 
+      (do
         (reset! error-ref [])
         (-> (fauna/save-rec "ingredients" cleaned)
             (.then (fn []
@@ -189,13 +191,13 @@
   (let [state (r/atom ingredient)
         update-density! (fn [unit-type new-density]
                           (swap! state
-                                 assoc-in 
+                                 assoc-in
                                  [:ingredient/calorie-density unit-type]
                                  new-density))
         errors (r/atom [])]
     (fn []
       [:div
-       [name-input 
+       [name-input
         "ingredient-name"
         "Ingredient Name: "
         (:ingredient/name @state)
@@ -258,10 +260,10 @@
                 (some? error) [:span {:class "error"} error]
                 :else (into [:ul]
                             (map (fn [in]
-                                   [:li 
-                                    [:a 
+                                   [:li
+                                    [:a
                                      {:href (str "#/recipes/" (:db/id in))}
-                                     (:ingredient/name in)]]))
+                                     (:recipe/name in)]]))
                             data))]]))))
 
 
@@ -282,7 +284,7 @@
      [:label (unit-type->label unit-type)]
      [:input {:value (str amount)
               :on-change #(on-change [unit-type [(target-val %) unit-name]])}]
-     [unit-select unit-type {:unit-name unit-name 
+     [unit-select unit-type {:unit-name unit-name
                              :on-change #(on-change [unit-type [amount %]])}]]))
 
 
@@ -314,7 +316,6 @@
 
 (defn recipe-ingredient-line
   [idx in all-ingredients on-change]
-  (prn in)
   [:li
    [:input {:type "name"
             :value (-> in :input/measurement first)
@@ -343,11 +344,67 @@
    [:button {:type "button" :on-click #(on-change [:add])} "Add ingredient to recipe"]])
 
 
+(defn clean-totals
+  [totals]
+  (into {}
+        (remove (fn [[unit-type [input unit-name]]]
+                  (empty-val? input)))
+        totals))
+
+
+(defn validate-recipe
+  [recipe]
+  (->> recipe
+       (spec/explain-data :recipe/input)
+       (:cljs.spec.alpha/problems)
+       (map (fn [{:keys [path]}]
+              (let [[p0 p1] path]
+                (cond (= [:recipe/name] path)
+                      "Recipe name must not be empty."
+                      (= [:recipe/totals] path)
+                      "At least one total must be entered."
+                      (= [:recipe/ingredients] path)
+                      "At least one ingredient is required."
+                      (= [:recipe/ingredients :input/measurement] [p0 p1])
+                      "All ingredients need a measurement"))))
+       (remove nil?)
+       (distinct)))
+
+
+(defn check-recipe-ingredient-types
+  [{:keys [recipe/ingredients]} indexed-ingredients]
+  (reduce (fn [acc {[_ unit-name] :input/measurement in-id :ingredient/id}]
+            (let [{in-name :ingredient/name :as in} (get indexed-ingredients in-id)]
+              (if (core/has-calorie-density-for-unit? in unit-name)
+                acc
+                (conj acc (str "Invalid unit for ingredient named " in-name)))))
+          []
+          ingredients))
+
+
+(defn on-recipe-save-click
+  [error-ref recipe indexed-ingredients]
+  (let [cleaned (update recipe :recipe/totals clean-totals)
+        es (into (validate-recipe cleaned)
+                 (check-recipe-ingredient-types cleaned indexed-ingredients))]
+    (if (empty? es)
+      (do
+        (reset! error-ref [])
+        (-> (fauna/save-rec "recipes" cleaned)
+            (.then (fn []
+                     (js/history.back)))
+            (.catch (fn [err]
+                      (reset! error-ref [(fauna-err->msg err)])))))
+      (reset! error-ref es))))
+
+
 (defn recipe-detail*
   [{:keys [recipe ingredients]}]
   (let [errors (r/atom [])
         sorted-ingredients (sort-by-lcase :ingredient/name ingredients)
-        state (r/atom recipe)]
+        indexed-ingredients (reduce #(assoc %1 (:db/id %2) %2) {} ingredients)
+        state (r/atom recipe)
+        new-ingredient (-> sorted-ingredients first :db/id core/new-recipe-ingredient)]
     (fn []
       [:div
        [name-input
@@ -355,7 +412,7 @@
         "Recipe Name: "
         (:recipe/name @state)
         #(swap! state assoc :recipe/name %)]
-       [recipe-totals 
+       [recipe-totals
         (:recipe/totals @state)
         (fn [[unit-type new-measure]]
           (swap! state assoc-in [:recipe/totals unit-type] new-measure))]
@@ -365,8 +422,7 @@
         (fn [[method idx new-data]]
           (swap! state update :recipe/ingredients
                  (fn [is]
-                   (prn method idx new-data is)
-                   (cond (= :add method) (conj is fauna/new-recipe-ingredient)
+                   (cond (= :add method) (conj is new-ingredient)
                          (= :delete method) (into (subvec is 0 idx) (subvec is (inc idx)))
                          (= :update method) (assoc is idx new-data)
                          :else is))))]
@@ -374,12 +430,16 @@
         [:label {:for "recipe-notes"} [:h4 "Notes:"]]
         [:textarea
          {:id "recipe-notes"
-          :on-change #(swap! state assoc :recipe/notes (target-val %)) 
+          :on-change #(swap! state assoc :recipe/notes (target-val %))
           :value (:recipe/notes @state)
           :rows 10
           :cols 50}]]
-       [:button {:type "button"} "Cancel"]
-       [:button {:type "button"} "Save"]])))
+       [:button {:type "button" :on-click on-cancel-click} "Cancel"]
+       [:button
+        {:type "button"
+         :on-click #(on-recipe-save-click errors @state indexed-ingredients)}
+        "Save"]
+       [error-list @errors]])))
 
 
 (defn recipe-detail

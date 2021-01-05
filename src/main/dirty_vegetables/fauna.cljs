@@ -1,6 +1,7 @@
 (ns dirty-vegetables.fauna
   (:require [clojure.set :as sets]
             [clojure.walk :as walk]
+            [dirty-vegetables.core :as core]
             [oops.core :refer [oget oset! ocall oapply ocall! oapply!
                                oget+ oset!+ ocall+ oapply+ ocall!+ oapply!+]]
             ["faunadb" :as f]))
@@ -93,24 +94,7 @@
   (attach-identity-events))
 
 
-(def default-mass-unit "gram")
-(def default-volume-unit "cup")
-(def default-quantity-unit "count")
-
-
-(def default-densities
-  {:unit.type/mass {:calorie-density/measurement [nil default-mass-unit]}
-   :unit.type/volume {:calorie-density/measurement [nil default-volume-unit]}
-   :unit.type/quantity {:calorie-density/measurement [nil default-quantity-unit]}})
-
-
-(def new-ingredient
-  {:db/id "new"
-   :ingredient/name "New Ingredient" 
-   :ingredient/calorie-density default-densities})
-
-
-(defn write-payload 
+(defn write-payload
   [rec]
   #js {:data (clj->js (walk/stringify-keys (dissoc rec :db/id)))})
 
@@ -154,7 +138,7 @@
   {:id :db/id
    :name :ingredient/name
    :calorie-density :ingredient/calorie-density
-   :volume :unit.type/volume 
+   :volume :unit.type/volume
    :mass :unit.type/mass
    :quantity :unit.type/quantity
    :measurement :calorie-density/measurement
@@ -201,7 +185,10 @@
       (if-let [fk @db-key]
         (-> (ocall (f/Client. #js {:secret fk}) "query" query)
             (.then (fn [resp]
-                     (resv (xform (from-fauna resp)))))
+                     (let [data (from-fauna resp)]
+                       (resv (if (map? data)
+                               (xform data)
+                               (mapv xform data))))))
             (.catch (fn [err]
                       (js/console.error err)
                       (rej ::read-error))))
@@ -210,7 +197,7 @@
 
 (def all-ingredients-query
   (f/query.Map
-    (f/query.Paginate 
+    (f/query.Paginate
       (f/query.Documents
         (f/query.Collection "ingredients"))
       #js {:size 10000})
@@ -224,15 +211,15 @@
 
 (defn add-default-densities
   [ingredient]
-  (update-in ingredient
-             [:data :ingredient/calorie-density]
-             #(merge default-densities %)))
+  (update ingredient
+          :ingredient/calorie-density
+          #(merge core/default-densities %)))
 
 
 (defn fetch-single-ingredient
   [id]
-  (if (= id (:db/id new-ingredient))
-    (js/Promise.resolve new-ingredient)
+  (if (= id (:db/id core/new-ingredient))
+    (js/Promise.resolve core/new-ingredient)
     (read-data (f/query.Get (f/query.Ref (f/query.Collection "ingredients") id))
                (comp add-default-densities
                      (key-map-xform ingredient-key-map)))))
@@ -240,7 +227,7 @@
 
 (def all-recipes-query
   (f/query.Map
-    (f/query.Paginate 
+    (f/query.Paginate
       (f/query.Documents
         (f/query.Collection "recipes"))
       #js {:size 10000})
@@ -251,42 +238,37 @@
   {:name :recipe/name
    :notes :recipe/notes
    :ingredients :recipe/ingredients
-   :totals :recipe/totals 
-   :id :ingredient/id 
+   :totals :recipe/totals
+   :id :ingredient/id
    :measurement :input/measurement
    :mass :unit.type/mass
    :volume :unit.type/volume
    :quantity :unit.type/quantity})
 
 
-; TODO move to core
-(def new-recipe-ingredient
-  {:input/measurement ["1" "cup"]
-   :ingredient/id nil})
+(defn fix-recipe-id
+  [{:keys [ingredient/id] :as recipe}]
+  (-> recipe
+      (dissoc recipe :ingredient/id)
+      (assoc recipe :db/id id)))
 
 
-(def new-recipe
-  {:db/id "new"
-   :recipe/name "New Recipe"
-   :recipe/notes ""
-   :recipe/ingredients []
-   :recipe/totals {:unit.type/mass [nil default-mass-unit]
-                   :unit.type/volume [nil default-volume-unit]
-                   :unit.type/quantity [nil default-quantity-unit]}})
+(def recipe-xform
+  (comp #(sets/rename-keys % {:ingredient/id :db/id})
+        (key-map-xform recipe-key-map)))
 
 
 (defn fetch-all-recipes
   []
-  (read-data all-recipes-query (key-map-xform recipe-key-map)))
+  (read-data all-recipes-query recipe-xform))
 
 
 (defn fetch-single-recipe
   [id]
-  (if (= id (:db/id new-recipe))
-    (js/Promise.resolve new-recipe)
+  (if (= id (:db/id core/new-recipe))
+    (js/Promise.resolve core/new-recipe)
     (read-data (f/query.Get (f/query.Ref (f/query.Collection "recipes") id))
-               (comp add-default-densities
-                     (key-map-xform recipe-key-map)))))
+               recipe-xform)))
 
 
 (defn fetch-recipe-and-all-ingredients

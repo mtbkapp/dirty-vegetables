@@ -71,7 +71,7 @@
 (defn init
   []
   (fauna/init! handle-auth-event)
-  (route/start! router {:default :app/home 
+  (route/start! router {:default :app/home
                         :on-navigate on-navigate})
   (rd/render [scaffold] (js/document.getElementById "app")))
 

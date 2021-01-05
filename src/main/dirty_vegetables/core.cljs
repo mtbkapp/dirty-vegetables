@@ -75,7 +75,7 @@
 (spec/def :calorie-density/measurement :input/measurement)
 (spec/def :calorie-density/calories integer?)
 
-(spec/def :db/id any?)
+(spec/def :db/id (spec/and string? not-empty))
 (spec/def :ingredient/id :db/id)
 (spec/def :ingredient/name :input/name)
 
@@ -89,14 +89,20 @@
 
 (spec/def :recipe/name :input/name)
 (spec/def :recipe/notes string?)
-(spec/def :recipe/ingredients (spec/coll-of :recipe/ingredient))
+
+(spec/def :recipe/ingredients
+  (spec/and (spec/coll-of :recipe/ingredient)
+            #(< 0 (count %))))
+
 (spec/def :recipe/ingredient
   (spec/keys :req [:input/measurement
                    :ingredient/id]))
 
 
 (spec/def :recipe/totals
-  (spec/map-of :unit/type :input/measurement))
+  (spec/and
+    (spec/map-of :unit/type :input/measurement)
+    #(< 0 (count %))))
 
 
 (defn read-fraction
@@ -111,14 +117,14 @@
 (defn read-input-number
   [s]
   (if-let [[kind v] (spec/conform :input/number s)]
-    (cond (= kind :fraction) (read-fraction v)    
-          (= kind :decimal) (js/parseFloat v) 
+    (cond (= kind :fraction) (read-fraction v)
+          (= kind :decimal) (js/parseFloat v)
           (= kind :integer) (js/parseInt v 10))))
 
 
 (defn sub-ingredients
   [recipe ingredients]
-  (update recipe 
+  (update recipe
           :recipe/ingredients
           (fn [is]
             (map (fn [{:keys [ingredient/id] :as ri}]
@@ -162,3 +168,44 @@
                           (:unit/factor amount-unit))]
     (* amount-in-base (/ total-calories total-amount-in-base))))
 
+
+(defn has-calorie-density-for-unit?
+  [ingredient unit-name]
+  (let [types (-> ingredient
+                  :ingredient/calorie-density
+                  keys
+                  set)
+        unit (get-in units [unit-name :unit/type])]
+    (contains? types unit)))
+
+
+(def default-mass-unit "gram")
+(def default-volume-unit "cup")
+(def default-quantity-unit "count")
+
+
+(def default-densities
+  {:unit.type/mass {:calorie-density/measurement [nil default-mass-unit]}
+   :unit.type/volume {:calorie-density/measurement [nil default-volume-unit]}
+   :unit.type/quantity {:calorie-density/measurement [nil default-quantity-unit]}})
+
+
+(def new-ingredient
+  {:db/id "new"
+   :ingredient/name "New Ingredient"
+   :ingredient/calorie-density default-densities})
+
+(defn new-recipe-ingredient
+  [ingredient-id]
+  {:input/measurement [nil "cup"]
+   :ingredient/id ingredient-id})
+
+
+(def new-recipe
+  {:db/id "new"
+   :recipe/name "New Recipe"
+   :recipe/notes ""
+   :recipe/ingredients []
+   :recipe/totals {:unit.type/mass [nil default-mass-unit]
+                   :unit.type/volume [nil default-volume-unit]
+                   :unit.type/quantity [nil default-quantity-unit]}})
