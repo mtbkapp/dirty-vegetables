@@ -31,6 +31,8 @@
 (def all-units-sorted
   (sort-by :unit/name (vals units)))
 
+(def default-how-much-unit-name "gram")
+
 (defn units-of-type
   [unit-type]
   (filter #(= unit-type (:unit/type %)) (vals units)))

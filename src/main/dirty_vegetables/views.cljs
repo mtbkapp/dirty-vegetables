@@ -7,11 +7,6 @@
             [reagent.dom :as rd]))
 
 
-(defn home
-  [[params query]]
-  [:div "home"])
-
-
 (def fauna-err->msg
   {::fauna/no-key "Db key not set. How'd you get here?"
    ::fauna/not-implemented "Not implemented."
@@ -22,6 +17,76 @@
 (defn target-val
   [e]
   (.-value (.-target e)))
+
+
+(defn unit-option
+  [unit]
+  [:option {:value (:unit/name unit)} (:unit/name unit)])
+
+
+(defn unit-select
+  [{:keys [selected units on-change]}]
+  (into [:select {:value selected
+                  :on-change #(on-change (target-val %))}]
+        (map unit-option)
+        units))
+
+
+(defn on-how-much-click
+  [state]
+  ; check if input is valid
+  ; if not, add errors to state
+  ; if valid put the answer calorie-count  
+  )
+
+
+(defn combine-foods
+  [recipes ingredients]
+  []
+  )
+
+(defn food-select
+  [{:keys [selected foods on-change]}]
+  [:select]
+  )
+
+
+(defn home
+  [[params query]]
+  (let [state (r/atom {:amount ""
+                       :unit core/default-how-much-unit-name 
+                       :selected-food nil
+                       :errors []
+                       :calorie-count nil
+                       :fetching? true})]
+    (-> (fauna/fetch-all-recipes-and-ingredients)
+        (.then (fn [{:keys [recipes ingredients]}]
+                 (let [foods (combine-foods recipes ingredients)]
+                 (swap! state assoc
+                        :fetching? false
+                        :foods foods
+                        :selected-food (first foods)))))
+        (.catch (fn [err]
+                  (swap! state assoc
+                         :fetching? false
+                         :errors ["Error loading data"]))))
+    (fn []
+      (if (:fetching? @state)
+        [:div "Loading..."]
+        [:div
+         [:h4 "How many calories are in:"]
+         [:input {:type "text"
+                  :value (:amount @state) 
+                  :on-change #(swap! state assoc :amount (target-val %))}]
+         [unit-select {:selected (:unit @state)
+                       :units core/all-units-sorted
+                       :on-change #(swap! state assoc :unit %)}]
+         [food-select {:selected (:selected-food @state)
+                       :foods (:foods @state)
+                       :on-change #(swap! state assoc :selected-food %)}]
+         [:button {:type "button"
+                   :on-click #(swap! state on-how-much-click)}
+          "Go"]]))))
 
 
 (defn sort-by-lcase
@@ -58,11 +123,13 @@
                                      (:ingredient/name in)]]))
                             data))]]))))
 
-; TODO, only launch dialog when data has changed
-; TODO, confirm on save if data has changed too?
+
 (defn on-cancel-click
-  []
-  (if (js/confirm "Are you sure?")
+  [changed?]
+  (prn changed?)
+  (if changed?
+    (if (js/confirm "Are you sure?")
+      (js/history.back))
     (js/history.back)))
 
 
@@ -217,7 +284,10 @@
         (:ingredient/calorie-density @state)
         update-density!]
        [:div
-        [:button {:type "button" :on-click on-cancel-click} "Cancel"]
+        [:button 
+         {:type "button"
+          :on-click #(on-cancel-click (not= ingredient @state))}
+         "Cancel"]
         [:button {:type "button"
                   :on-click #(on-ingredient-save-click errors @state)}
          "Save"]]
@@ -267,7 +337,7 @@
                             data))]]))))
 
 
-(defn unit-select
+(defn runit-select
   [unit-type {:keys [unit-name on-change]}]
   (let [unit-options (map (fn [unit]
                             [:option {:value (:unit/name unit)} (:unit/name unit)])
@@ -284,7 +354,7 @@
      [:label (unit-type->label unit-type)]
      [:input {:value (str amount)
               :on-change #(on-change [unit-type [(target-val %) unit-name]])}]
-     [unit-select unit-type {:unit-name unit-name
+     [runit-select unit-type {:unit-name unit-name
                              :on-change #(on-change [unit-type [amount %]])}]]))
 
 
@@ -434,7 +504,10 @@
           :value (:recipe/notes @state)
           :rows 10
           :cols 50}]]
-       [:button {:type "button" :on-click on-cancel-click} "Cancel"]
+       [:button
+        {:type "button"
+         :on-click #(on-cancel-click (not= recipe @state))}
+        "Cancel"]
        [:button
         {:type "button"
          :on-click #(on-recipe-save-click errors @state indexed-ingredients)}

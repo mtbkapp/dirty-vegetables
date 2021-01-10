@@ -285,4 +285,16 @@
                     (rej err)))))))
 
 
+(defn fetch-all-recipes-and-ingredients
+  []
+  (js/Promise.
+    (fn [resv rej]
+      (-> (js/Promise.all
+            #js [(fetch-all-recipes) (fetch-all-ingredients)])
+          (.then (fn [arr]
+                   (resv {:recipes (aget arr 0)
+                          :ingredients (aget arr 1)})))
+          (.catch (fn [err]
+                    (js/console.error "Error in fetch-all-recipes-and-ingredients" err)
+                    (rej err)))))))
 
