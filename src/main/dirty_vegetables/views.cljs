@@ -19,6 +19,15 @@
   (.-value (.-target e)))
 
 
+(defn error-list
+  [errors]
+  (when (not-empty errors)
+    [:div {:class "error"} "Errors:"
+     (into [:ul]
+           (map (fn [e]
+                  [:li e])
+                errors))]))
+
 (defn unit-option
   [unit]
   [:option {:value (:unit/name unit)} (:unit/name unit)])
@@ -32,42 +41,57 @@
         units))
 
 
+(defn sort-by-lcase
+  [key-fn coll]
+  (sort-by (comp string/lower-case key-fn) coll))
+
+
 (defn on-how-much-click
-  [state]
+  [{:keys [amount unit recipes selected-recipe] :as state}]
   ; check if input is valid
   ; if not, add errors to state
   ; if valid put the answer calorie-count  
-  )
+  (let [recipe (nth recipes selected-recipe)
+        errors (cond-> []
+                 (not (spec/valid? :input/number amount))
+                 (conj "Invalid amount.")
+                 ; TODO fix this error check
+                 (contains? (:recipe/totals recipe)
+                            (get-in core/units [unit :unit/type]))
+                 (conj "Unit type mismatch."))]
+    (if (not-empty errors)
+      (assoc state :errors errors)
+      state)))
 
 
-(defn combine-foods
-  [recipes ingredients]
-  []
-  )
-
-(defn food-select
-  [{:keys [selected foods on-change]}]
-  [:select]
-  )
+(defn recipe-select
+  [{:keys [selected all-recipes on-change]}]
+  (into [:select {:value selected
+                  :on-change #(on-change (target-val %))}]
+        (map-indexed
+          (fn [i recipe]
+            [:option {:value i} (:recipe/name recipe)]))
+        all-recipes))
 
 
 (defn home
   [[params query]]
   (let [state (r/atom {:amount ""
                        :unit core/default-how-much-unit-name 
-                       :selected-food nil
+                       :selected-recipe nil
                        :errors []
                        :calorie-count nil
                        :fetching? true})]
-    (-> (fauna/fetch-all-recipes-and-ingredients)
-        (.then (fn [{:keys [recipes ingredients]}]
-                 (let [foods (combine-foods recipes ingredients)]
-                 (swap! state assoc
+    (-> (fauna/fetch-all-recipes)
+        (.then (fn [all-recipes]
+                 (swap! state
+                        assoc
                         :fetching? false
-                        :foods foods
-                        :selected-food (first foods)))))
+                        :recipes (sort-by-lcase :recipe/name all-recipes) 
+                        :selected-recipe 0)))
         (.catch (fn [err]
-                  (swap! state assoc
+                  (swap! state
+                         assoc
                          :fetching? false
                          :errors ["Error loading data"]))))
     (fn []
@@ -81,17 +105,14 @@
          [unit-select {:selected (:unit @state)
                        :units core/all-units-sorted
                        :on-change #(swap! state assoc :unit %)}]
-         [food-select {:selected (:selected-food @state)
-                       :foods (:foods @state)
-                       :on-change #(swap! state assoc :selected-food %)}]
+         [recipe-select {:selected (:selected-recipe @state)
+                         :all-recipes (:recipes @state)
+                         :on-change #(swap! state assoc :selected-recipe %)}]
          [:button {:type "button"
                    :on-click #(swap! state on-how-much-click)}
-          "Go"]]))))
+          "Go"]
+         [error-list (:errors @state)]]))))
 
-
-(defn sort-by-lcase
-  [key-fn coll]
-  (sort-by (comp string/lower-case key-fn) coll))
 
 
 (defn ingredient-list
@@ -194,16 +215,6 @@
                            (trigger-change number
                                            unit-name
                                            (target-val e)))}]]))
-
-(defn error-list
-  [errors]
-  (when (not-empty errors)
-    [:div {:class "error"} "Errors:"
-     (into [:ul]
-           (map (fn [e]
-                  [:li e])
-                errors))]))
-
 
 (defn clean-densities
   [ds]
