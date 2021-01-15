@@ -158,10 +158,20 @@
           0
           ingredients))
 
+
+(defn index-ingredients
+  [ingredients]
+  (reduce (fn [idx ingredient]
+            (assoc idx (:db/id ingredient) ingredient))
+          {}
+          ingredients))
+
+
 (defn how-much
   "Calculate how many calories are in a given amount of a recipe"
   [recipe ingredients amount unit-name]
-  (let [total-calories (calories-in (sub-ingredients recipe ingredients))
+  (let [ingredient-idx (index-ingredients ingredients)
+        total-calories (calories-in (sub-ingredients recipe ingredient-idx))
         amount-unit (get units unit-name)
         [total-amount total-unit] (get-in recipe [:recipe/totals (:unit/type amount-unit)])
         total-amount-in-base (* (read-input-number total-amount)

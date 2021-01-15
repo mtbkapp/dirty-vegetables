@@ -145,26 +145,32 @@
    :calories :calorie-density/calories})
 
 
+(defn from-fauna*
+  [resp data]
+  (js->clj
+    (cond (object? data)
+          (let [id (oget (oget resp "ref") "id")]
+            (aset data "id" id)
+            data)
+          (array? data)
+          (ocall data
+                 "map"
+                 (fn [x]
+                   (let [id (oget (oget x "ref") "id")
+                         data (oget x "data")]
+                     ; TODO figure out why I can't use oset!
+                     (aset data "id" id)
+                     data)))
+          :else
+          data)
+    :keywordize-keys true))
+
+
 (defn from-fauna
   [resp]
-  (let [data (oget resp "data")]
-    (js->clj
-      (cond (object? data)
-            (let [id (oget (oget resp "ref") "id")]
-              (aset data "id" id)
-              data)
-            (array? data)
-            (ocall data
-                   "map"
-                   (fn [x]
-                     (let [id (oget (oget x "ref") "id")
-                           data (oget x "data")]
-                       ; TODO figure out why I can't use oset!
-                       (aset data "id" id)
-                       data)))
-            :else
-            data)
-      :keywordize-keys true)))
+  (if (array? resp)
+    (from-fauna* resp resp)
+    (from-fauna* resp (oget resp "data"))))
 
 
 (defn key-map-xform
@@ -285,16 +291,15 @@
                     (rej err)))))))
 
 
-(defn fetch-all-recipes-and-ingredients
-  []
-  (js/Promise.
-    (fn [resv rej]
-      (-> (js/Promise.all
-            #js [(fetch-all-recipes) (fetch-all-ingredients)])
-          (.then (fn [arr]
-                   (resv {:recipes (aget arr 0)
-                          :ingredients (aget arr 1)})))
-          (.catch (fn [err]
-                    (js/console.error "Error in fetch-all-recipes-and-ingredients" err)
-                    (rej err)))))))
+(defn fetch-recipe-ingredients
+  [recipe-id]
+  (read-data
+    (f/query.Map
+      (f/query.Select
+        #js ["data" "ingredients"]
+        (f/query.Get (f/query.Ref (f/query.Collection "recipes") recipe-id)))
+      (f/query.Lambda "x" (f/query.Get (f/query.Ref (f/query.Collection "ingredients")
+                                                    (f/query.Select #js ["id"] 
+                                                                    (f/query.Var "x"))))))
+    (key-map-xform ingredient-key-map)))
 

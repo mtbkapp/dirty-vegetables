@@ -23,10 +23,12 @@ header ul {
   flex-grow: 1;
 }
 
-.sub-header .auth {
-
-}
-
 .error {
   color: red;
+}
+
+.calorie-count {
+  padding-top: 20px;
+  padding-bottom: 20px;
+  font-size: 20pt; 
 }

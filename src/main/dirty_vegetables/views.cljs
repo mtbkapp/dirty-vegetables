@@ -46,22 +46,45 @@
   (sort-by (comp string/lower-case key-fn) coll))
 
 
-(defn on-how-much-click
+(defn how-many-state->recipe
+  [{:keys [recipes selected-recipe] :as state}]
+  (nth recipes (js/parseInt selected-recipe)))
+
+
+(defn how-many-errors 
   [{:keys [amount unit recipes selected-recipe] :as state}]
-  ; check if input is valid
-  ; if not, add errors to state
-  ; if valid put the answer calorie-count  
-  (let [recipe (nth recipes selected-recipe)
-        errors (cond-> []
-                 (not (spec/valid? :input/number amount))
-                 (conj "Invalid amount.")
-                 ; TODO fix this error check
-                 (contains? (:recipe/totals recipe)
-                            (get-in core/units [unit :unit/type]))
-                 (conj "Unit type mismatch."))]
-    (if (not-empty errors)
-      (assoc state :errors errors)
-      state)))
+  (let [recipe (how-many-state->recipe state)]
+    (cond-> []
+      (not (spec/valid? :input/number amount))
+      (conj "Invalid amount.")
+      (not (contains? (:recipe/totals recipe)
+                      (get-in core/units [unit :unit/type])))
+      (conj "Unit type mismatch."))))
+
+
+(defn on-how-much-click
+  [state-ref]
+  (let [{:keys [amount unit recipes selected-recipe] :as state} @state-ref
+        recipe (how-many-state->recipe state)
+        errors (how-many-errors state)]
+    (swap! state-ref assoc :errors errors :calorie-count nil)
+    (when (empty? errors)
+      (swap! state-ref
+             assoc
+             :fetching? true
+             :calorie-count nil)
+      (-> (fauna/fetch-recipe-ingredients (:db/id recipe))
+          (.then (fn [ingredients]
+                   (swap! state-ref 
+                          assoc
+                          :calorie-count (core/how-much recipe ingredients amount unit)
+                          :fetching?  false)))
+          (.catch (fn [err]
+                    (js/console.error err)
+                    (swap! state-ref
+                           assoc
+                           :calorie-count nil
+                           :errors ["Error getting recipe ingredients."])))))))
 
 
 (defn recipe-select
@@ -77,8 +100,8 @@
 (defn home
   [[params query]]
   (let [state (r/atom {:amount ""
-                       :unit core/default-how-much-unit-name 
-                       :selected-recipe nil
+                       :unit core/default-how-much-unit-name
+                       :selected-recipe "0" 
                        :errors []
                        :calorie-count nil
                        :fetching? true})]
@@ -87,8 +110,7 @@
                  (swap! state
                         assoc
                         :fetching? false
-                        :recipes (sort-by-lcase :recipe/name all-recipes) 
-                        :selected-recipe 0)))
+                        :recipes (sort-by-lcase :recipe/name all-recipes))))
         (.catch (fn [err]
                   (swap! state
                          assoc
@@ -100,17 +122,20 @@
         [:div
          [:h4 "How many calories are in:"]
          [:input {:type "text"
-                  :value (:amount @state) 
-                  :on-change #(swap! state assoc :amount (target-val %))}]
+                  :value (:amount @state)
+                  :on-change #(swap! state
+                                     assoc 
+                                     :amount (target-val %)
+                                     :calorie-count nil)}]
          [unit-select {:selected (:unit @state)
                        :units core/all-units-sorted
-                       :on-change #(swap! state assoc :unit %)}]
+                       :on-change #(swap! state assoc :unit % :calorie-count nil)}]
          [recipe-select {:selected (:selected-recipe @state)
                          :all-recipes (:recipes @state)
-                         :on-change #(swap! state assoc :selected-recipe %)}]
-         [:button {:type "button"
-                   :on-click #(swap! state on-how-much-click)}
-          "Go"]
+                         :on-change #(swap! state assoc :selected-recipe % :calorie-count nil)}]
+         [:button {:type "button" :on-click #(on-how-much-click state)} "Go"]
+         (if-let [cc (:calorie-count @state)]
+           [:div {:class "calorie-count"} (str cc " calories")])
          [error-list (:errors @state)]]))))
 
 
@@ -295,7 +320,7 @@
         (:ingredient/calorie-density @state)
         update-density!]
        [:div
-        [:button 
+        [:button
          {:type "button"
           :on-click #(on-cancel-click (not= ingredient @state))}
          "Cancel"]
