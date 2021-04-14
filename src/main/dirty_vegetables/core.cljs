@@ -40,7 +40,7 @@
 
 (def integer-pattern #"\d+")
 (def fraction-pattern #"(\d+ )?\d+/\d+")
-(def decimal-pattern #"\d+\.\d+")
+(def decimal-pattern #"(\d+)?\.\d+")
 
 (defn matches?
   [pattern]
@@ -118,7 +118,7 @@
 
 (defn read-input-number
   [s]
-  (if-let [[kind v] (spec/conform :input/number s)]
+  (if-let [[kind v] (spec/conform :input/number (string/trim s))]
     (cond (= kind :fraction) (read-fraction v)
           (= kind :decimal) (js/parseFloat v)
           (= kind :integer) (js/parseInt v 10))))
